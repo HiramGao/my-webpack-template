@@ -5,7 +5,9 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 //将文件注入html文件中
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 //清理构建目录
-const { CleanWebpackPlugin } = require('clean-webpack-plugin');
+const {
+    CleanWebpackPlugin
+} = require('clean-webpack-plugin');
 //友好输出构建信息
 const FriendlyErrorsWebpackPlugin = require('friendly-errors-webpack-plugin');
 //体积分析
@@ -13,6 +15,9 @@ const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPl
 //并行压缩
 const TerserPlugin = require('terser-webpack-plugin');
 
+const HtmlWebpackTagsPlugin = require('html-webpack-tags-plugin');
+//缓存
+const HardSourceWebpackPlugin = require('hard-source-webpack-plugin');
 
 
 module.exports = {
@@ -28,8 +33,14 @@ module.exports = {
         rules: [{
                 test: /\.js$/i,
                 exclude: /node_modules/,
-                use: [
-                    'babel-loader',
+                use: [{
+                        //多进程打包
+                        loader: "thread-loader",
+                        options: {
+                            workers: 2,
+                        }
+                    },
+                    'babel-loader?cacheDirectory=true',
                     //语法检查
                     {
                         loader: 'eslint-loader',
@@ -43,7 +54,12 @@ module.exports = {
                 test: /\.css$/i,
                 use: [
                     MiniCssExtractPlugin.loader,
-                    { loader: 'css-loader', options: { importLoaders: 1 } },
+                    {
+                        loader: 'css-loader',
+                        options: {
+                            importLoaders: 1
+                        }
+                    },
                     'postcss-loader'
                 ],
             },
@@ -93,6 +109,7 @@ module.exports = {
         ],
     },
     plugins: [
+        new FriendlyErrorsWebpackPlugin(),
         new CleanWebpackPlugin(),
         new MiniCssExtractPlugin({
             filename: '[name].[hash:8].css',
@@ -100,11 +117,14 @@ module.exports = {
         new HtmlWebpackPlugin({
             template: path.join(__dirname, 'src/index.hbs'),
             filename: 'index.html',
-            inject: true,
-            cache: true,
+            inject: false,
+            cache: false,
             chunks: ['index']
         }),
-        new FriendlyErrorsWebpackPlugin(),
+        new HtmlWebpackTagsPlugin({
+            tags: '/library/library.dll.js',
+            publicPath: 'build/'
+        }),
         function errorPlugin() {
             this.hooks.done.tap('done', (stats) => {
                 if (stats.compilation.errors && stats.compilation.errors.length && process.argv.indexOf('--watch') === -1) {
@@ -116,6 +136,11 @@ module.exports = {
         new BundleAnalyzerPlugin({
             analyzerMode: 'json'
         }),
+        //DLL
+        new webpack.DllReferencePlugin({
+            manifest: require('./build/library/library.json')
+        }),
+        new HardSourceWebpackPlugin()
     ],
     optimization: {
         //依赖分隔
